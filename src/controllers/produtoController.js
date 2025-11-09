@@ -1,115 +1,113 @@
-import Produto from '../models/produtoModel.js';
+// src/controllers/produtoController.js
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
+import { Produto } from '../models/index.js';
 
-// === Listar todos os produtos ===
-export const listarProdutos = async (req, res) => {
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const UPLOADS_DIR = path.resolve(__dirname, '../../uploads');
+
+export const listarProdutos = async (_req, res) => {
   try {
     const produtos = await Produto.findAll({ order: [['id', 'DESC']] });
-    res.status(200).json(produtos);
+    return res.json(produtos); // mantive compatibilidade com frontend que espera array
   } catch (err) {
-    console.error('Erro ao listar produtos:', err);
-    res.status(500).json({ error: 'Erro interno ao listar produtos.' });
+    console.error('❌ listarProdutos:', err);
+    return res.status(500).json({ success: false, message: 'Erro ao listar produtos.' });
   }
 };
 
-// === Criar novo produto ===
 export const criarProduto = async (req, res) => {
   try {
     const { nome, descricao, preco, categoria, quantidadeEstoque } = req.body;
-
-    // Validação básica
-    if (!nome || !preco) {
-      return res.status(400).json({ error: 'Nome e preço são obrigatórios.' });
+    if (!nome || preco == null) {
+      return res.status(400).json({ success: false, message: 'Nome e preço são obrigatórios.' });
     }
 
     let imagemUrl = '';
     if (req.file) {
       const ext = path.extname(req.file.originalname).toLowerCase();
-      if (!['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+      const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+      if (!allowed.includes(ext)) {
         fs.unlinkSync(req.file.path);
-        return res.status(400).json({ error: 'Formato de imagem inválido.' });
+        return res.status(400).json({ success: false, message: 'Formato de imagem inválido.' });
       }
       imagemUrl = `/uploads/${req.file.filename}`;
     }
 
     const produto = await Produto.create({
       nome,
-      descricao,
-      preco: parseFloat(preco),
-      categoria,
-      quantidadeEstoque: quantidadeEstoque ? parseInt(quantidadeEstoque) : 0,
+      descricao: descricao || null,
+      preco: Number.parseFloat(preco),
+      categoria: categoria || null,
+      quantidadeEstoque: Number.isFinite(Number(quantidadeEstoque)) ? Number(quantidadeEstoque) : 0,
       imagemUrl
     });
 
-    res.status(201).json(produto); // retorna o produto direto (padrão)
+    return res.status(201).json(produto);
   } catch (err) {
-    console.error('Erro ao criar produto:', err);
-    res.status(500).json({ error: 'Erro interno ao criar produto.' });
+    console.error('❌ criarProduto:', err);
+    return res.status(500).json({ success: false, message: 'Erro ao criar produto.' });
   }
 };
 
-// === Atualizar produto existente ===
 export const atualizarProduto = async (req, res) => {
   try {
     const { id } = req.params;
-    const { nome, descricao, preco, categoria, quantidadeEstoque } = req.body;
-
     const produto = await Produto.findByPk(id);
-    if (!produto) {
-      return res.status(404).json({ error: 'Produto não encontrado.' });
-    }
+    if (!produto) return res.status(404).json({ success: false, message: 'Produto não encontrado.' });
+
+    const { nome, descricao, preco, categoria, quantidadeEstoque } = req.body;
 
     if (req.file) {
       const ext = path.extname(req.file.originalname).toLowerCase();
-      if (!['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(ext)) {
+      const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+      if (!allowed.includes(ext)) {
         fs.unlinkSync(req.file.path);
-        return res.status(400).json({ error: 'Formato de imagem inválido.' });
+        return res.status(400).json({ success: false, message: 'Formato de imagem inválido.' });
       }
 
-      // remove imagem anterior se existir
+      // Remove a anterior se existir
       if (produto.imagemUrl) {
-        const antigo = path.join('uploads', path.basename(produto.imagemUrl));
+        const antigo = path.join(UPLOADS_DIR, path.basename(produto.imagemUrl));
         if (fs.existsSync(antigo)) fs.unlinkSync(antigo);
       }
-
       produto.imagemUrl = `/uploads/${req.file.filename}`;
     }
 
-    produto.nome = nome || produto.nome;
-    produto.descricao = descricao || produto.descricao;
-    produto.preco = preco || produto.preco;
-    produto.categoria = categoria || produto.categoria;
-    produto.quantidadeEstoque = quantidadeEstoque || produto.quantidadeEstoque;
+    if (nome) produto.nome = nome;
+    if (descricao !== undefined) produto.descricao = descricao;
+    if (preco !== undefined) produto.preco = Number.parseFloat(preco);
+    if (categoria !== undefined) produto.categoria = categoria;
+    if (quantidadeEstoque !== undefined) {
+      const q = Number.parseInt(quantidadeEstoque, 10);
+      if (Number.isFinite(q) && q >= 0) produto.quantidadeEstoque = q;
+    }
 
     await produto.save();
-
-    res.status(200).json(produto);
+    return res.json(produto);
   } catch (err) {
-    console.error('Erro ao atualizar produto:', err);
-    res.status(500).json({ error: 'Erro interno ao atualizar produto.' });
+    console.error('❌ atualizarProduto:', err);
+    return res.status(500).json({ success: false, message: 'Erro ao atualizar produto.' });
   }
 };
 
-// === Deletar produto ===
 export const deletarProduto = async (req, res) => {
   try {
     const { id } = req.params;
     const produto = await Produto.findByPk(id);
-    if (!produto) {
-      return res.status(404).json({ error: 'Produto não encontrado.' });
-    }
+    if (!produto) return res.status(404).json({ success: false, message: 'Produto não encontrado.' });
 
-    // remove imagem associada se existir
     if (produto.imagemUrl) {
-      const filePath = path.join('uploads', path.basename(produto.imagemUrl));
+      const filePath = path.join(UPLOADS_DIR, path.basename(produto.imagemUrl));
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
 
     await produto.destroy();
-    res.status(200).json({ message: 'Produto deletado com sucesso.' });
+    return res.json({ success: true, message: 'Produto deletado com sucesso.' });
   } catch (err) {
-    console.error('Erro ao deletar produto:', err);
-    res.status(500).json({ error: 'Erro interno ao deletar produto.' });
+    console.error('❌ deletarProduto:', err);
+    return res.status(500).json({ success: false, message: 'Erro ao deletar produto.' });
   }
 };

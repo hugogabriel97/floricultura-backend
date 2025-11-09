@@ -1,130 +1,113 @@
 // src/controllers/carrinhoController.js
-import Carrinho from '../models/carrinhoModel.js';
-import Produto from '../models/produtoModel.js';
+import { Carrinho, Produto } from '../models/index.js';
 
-// === Listar itens do carrinho ===
+// GET /api/carrinho/:usuarioId
 export const listarCarrinho = async (req, res) => {
   try {
     const { usuarioId } = req.params;
-    if (!usuarioId) {
-      return res.status(400).json({ success: false, message: 'ID do usuário é obrigatório.' });
-    }
+    if (!usuarioId) return res.status(400).json({ success: false, message: 'ID do usuário é obrigatório.' });
 
     const itens = await Carrinho.findAll({
       where: { usuarioId },
-      include: [{
-        model: Produto,
-        as: 'Produto',
-        attributes: ['id', 'nome', 'preco', 'imagemUrl', 'categoria']
-      }],
+      include: [{ model: Produto, as: 'Produto', attributes: ['id', 'nome', 'preco', 'imagemUrl', 'categoria'] }],
       order: [['createdAt', 'DESC']]
     });
 
     return res.status(200).json({ success: true, data: itens });
   } catch (error) {
-    console.error('❌ Erro ao listar carrinho:', error);
+    console.error('❌ listarCarrinho:', error);
     return res.status(500).json({ success: false, message: 'Erro ao listar carrinho.' });
   }
 };
 
-// === Adicionar produto ao carrinho ===
+// POST /api/carrinho
 export const adicionarAoCarrinho = async (req, res) => {
   try {
-    const { usuarioId, produtoId, quantidade } = req.body;
+    const { usuarioId, produtoId } = req.body;
+    let { quantidade } = req.body;
 
     if (!usuarioId || !produtoId) {
       return res.status(400).json({ success: false, message: 'usuarioId e produtoId são obrigatórios.' });
     }
 
-    const qtd = Math.max(1, parseInt(quantidade) || 1);
+    quantidade = Number.parseInt(quantidade, 10);
+    if (!Number.isFinite(quantidade) || quantidade < 1) quantidade = 1;
 
-    // Verifica se o produto existe
     const produto = await Produto.findByPk(produtoId);
-    if (!produto) {
-      return res.status(404).json({ success: false, message: 'Produto não encontrado.' });
-    }
+    if (!produto) return res.status(404).json({ success: false, message: 'Produto não encontrado.' });
 
-    // Busca item existente no carrinho
     let item = await Carrinho.findOne({ where: { usuarioId, produtoId } });
-
     if (item) {
-      item.quantidade += qtd;
+      item.quantidade += quantidade;
       await item.save();
     } else {
-      item = await Carrinho.create({ usuarioId, produtoId, quantidade: qtd });
+      item = await Carrinho.create({ usuarioId, produtoId, quantidade });
     }
 
     return res.status(201).json({
       success: true,
-      message: 'Produto adicionado ao carrinho com sucesso.',
+      message: 'Produto adicionado ao carrinho.',
       data: item
     });
   } catch (error) {
-    console.error('❌ Erro ao adicionar ao carrinho:', error);
+    console.error('❌ adicionarAoCarrinho:', error);
     return res.status(500).json({ success: false, message: 'Erro ao adicionar ao carrinho.' });
   }
 };
 
-// === Atualizar quantidade ===
+// PUT /api/carrinho/:id
 export const atualizarItem = async (req, res) => {
   try {
     const { id } = req.params;
-    const { quantidade } = req.body;
+    let { quantidade } = req.body;
 
-    if (!quantidade || parseInt(quantidade) < 1) {
+    quantidade = Number.parseInt(quantidade, 10);
+    if (!Number.isFinite(quantidade) || quantidade < 1) {
       return res.status(400).json({ success: false, message: 'Quantidade inválida.' });
     }
 
     const item = await Carrinho.findByPk(id);
-    if (!item) {
-      return res.status(404).json({ success: false, message: 'Item não encontrado no carrinho.' });
-    }
+    if (!item) return res.status(404).json({ success: false, message: 'Item não encontrado.' });
 
-    item.quantidade = parseInt(quantidade);
+    item.quantidade = quantidade;
     await item.save();
 
-    return res.status(200).json({ success: true, message: 'Quantidade atualizada.', data: item });
+    return res.json({ success: true, message: 'Quantidade atualizada.', data: item });
   } catch (error) {
-    console.error('❌ Erro ao atualizar item do carrinho:', error);
+    console.error('❌ atualizarItem:', error);
     return res.status(500).json({ success: false, message: 'Erro ao atualizar item do carrinho.' });
   }
 };
 
-// === Remover item ===
+// DELETE /api/carrinho/:id
 export const removerItem = async (req, res) => {
   try {
     const { id } = req.params;
-
     const item = await Carrinho.findByPk(id);
-    if (!item) {
-      return res.status(404).json({ success: false, message: 'Item não encontrado no carrinho.' });
-    }
+    if (!item) return res.status(404).json({ success: false, message: 'Item não encontrado.' });
 
     await item.destroy();
-    return res.status(200).json({ success: true, message: 'Item removido do carrinho.' });
+    return res.json({ success: true, message: 'Item removido do carrinho.' });
   } catch (error) {
-    console.error('❌ Erro ao remover item do carrinho:', error);
+    console.error('❌ removerItem:', error);
     return res.status(500).json({ success: false, message: 'Erro ao remover item do carrinho.' });
   }
 };
 
-// === Limpar carrinho (após finalizar compra) ===
+// DELETE /api/carrinho/usuario/:usuarioId
 export const limparCarrinhoUsuario = async (req, res) => {
   try {
     const { usuarioId } = req.params;
-    if (!usuarioId) {
-      return res.status(400).json({ success: false, message: 'ID do usuário é obrigatório.' });
-    }
+    if (!usuarioId) return res.status(400).json({ success: false, message: 'ID do usuário é obrigatório.' });
 
-    const deletados = await Carrinho.destroy({ where: { usuarioId } });
-
-    return res.status(200).json({
+    const deleted = await Carrinho.destroy({ where: { usuarioId } });
+    return res.json({
       success: true,
-      message: `Carrinho do usuário ${usuarioId} limpo com sucesso.`,
-      deletedCount: deletados
+      message: 'Carrinho limpo com sucesso.',
+      data: { deletedCount: deleted }
     });
   } catch (error) {
-    console.error('❌ Erro ao limpar carrinho:', error);
+    console.error('❌ limparCarrinhoUsuario:', error);
     return res.status(500).json({ success: false, message: 'Erro ao limpar carrinho.' });
   }
 };

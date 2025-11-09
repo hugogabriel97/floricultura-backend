@@ -1,33 +1,42 @@
+// src/models/usuarioModel.js
 import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js';
 
 const Usuario = sequelize.define('Usuario', {
+  id: {
+    type: DataTypes.INTEGER, 
+    autoIncrement: true,
+    primaryKey: true
+  },
   nome: {
-    type: DataTypes.STRING,
+    type: DataTypes.STRING(120),
     allowNull: false,
+    validate: { len: [2, 120] }
   },
   email: {
-    type: DataTypes.STRING,
+    type: DataTypes.STRING(180),
     allowNull: false,
     unique: true,
     validate: { isEmail: true }
   },
   senhaHash: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: DataTypes.STRING(255),
+    allowNull: false
   },
   tipoUsuario: {
-    type: DataTypes.STRING,
-    defaultValue: 'cliente',
+    type: DataTypes.ENUM('cliente', 'admin'),
+    defaultValue: 'cliente'
+  },
+  ativo: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
   }
 }, {
   tableName: 'usuarios',
-  timestamps: false,
+  timestamps: false,            // mantenha false se sua tabela não tem createdAt/updatedAt
+  indexes: [
+    { unique: true, fields: ['email'] }
+  ]
 });
-
-// Sincroniza automaticamente (desativar em produção)
-sequelize.sync()
-  .then(() => console.log('✅ Tabela Usuario sincronizada'))
-  .catch(err => console.error('❌ Erro ao sincronizar Usuario:', err));
 
 export default Usuario;

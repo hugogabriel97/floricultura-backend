@@ -1,155 +1,176 @@
-import Usuario from '../models/usuarioModel.js';
+// src/controllers/usuarioController.js
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { Usuario } from '../models/index.js';
+
+const SALT_ROUNDS = 10;
+
+const signToken = (payload, exp = process.env.JWT_EXPIRES_IN || '7d') =>
+  jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: exp });
 
 /**
- * ===================================
- * AUTENTICAÇÃO DE USUÁRIO
- * ===================================
+ * Retorna a base URL do frontend.
+ * - Em produção, use BASE_URL (ex.: https://seu-front.app)
+ * - Em dev, tenta montar via proxy/host da requisição
  */
+const getBaseUrl = (req) => {
+  if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/+$/, '');
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+  const host = req.headers['x-forwarded-host'] || req.get('host');
+  return `${proto}://${host}`;
+};
 
-// Registrar novo usuário
+// === Registrar ===
 export const registrarUsuario = async (req, res) => {
   try {
-    const { nome, email, senha, tipoUsuario } = req.body;
+    let { nome, email, senha, tipoUsuario } = req.body || {};
+    nome = (nome || '').trim();
+    email = (email || '').trim().toLowerCase();
+    senha = String(senha || '');
 
     if (!nome || !email || !senha) {
-      return res.status(400).json({ error: 'Nome, e-mail e senha são obrigatórios.' });
+      return res.status(400).json({ success: false, message: 'Nome, e-mail e senha são obrigatórios.' });
     }
 
-    const usuarioExistente = await Usuario.findOne({ where: { email } });
-    if (usuarioExistente) {
-      return res.status(400).json({ error: 'E-mail já cadastrado.' });
+    const exists = await Usuario.findOne({ where: { email } });
+    if (exists) {
+      return res.status(409).json({ success: false, message: 'E-mail já cadastrado.' });
     }
 
-    const senhaHash = await bcrypt.hash(senha, 10);
+    const senhaHash = await bcrypt.hash(senha, SALT_ROUNDS);
     const novoUsuario = await Usuario.create({
       nome,
       email,
       senhaHash,
-      tipoUsuario: tipoUsuario || 'cliente'
+      tipoUsuario: tipoUsuario || 'cliente',
     });
 
-    const token = jwt.sign(
-      { id: novoUsuario.id, tipoUsuario: novoUsuario.tipoUsuario },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-    );
+    const token = signToken({ id: novoUsuario.id, tipoUsuario: novoUsuario.tipoUsuario, nome: novoUsuario.nome });
 
-    res.status(201).json({
-      usuario: {
-        id: novoUsuario.id,
-        nome: novoUsuario.nome,
-        email: novoUsuario.email,
-        tipoUsuario: novoUsuario.tipoUsuario
+    return res.status(201).json({
+      success: true,
+      data: {
+        usuario: {
+          id: novoUsuario.id,
+          nome: novoUsuario.nome,
+          email: novoUsuario.email,
+          tipoUsuario: novoUsuario.tipoUsuario,
+        },
+        token,
       },
-      token
+      message: 'Usuário registrado com sucesso.',
     });
   } catch (error) {
-    console.error('❌ Erro ao registrar usuário:', error);
-    res.status(500).json({ error: 'Erro interno ao registrar usuário.' });
+    console.error('❌ registrarUsuario:', error);
+    return res.status(500).json({ success: false, message: 'Erro interno ao registrar usuário.' });
   }
 };
 
-// Login de usuário
+// === Login ===
 export const loginUsuario = async (req, res) => {
   try {
-    const { email, senha } = req.body;
+    let { email, senha } = req.body || {};
+    email = (email || '').trim().toLowerCase();
+    senha = String(senha || '');
 
     if (!email || !senha) {
-      return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
+      return res.status(400).json({ success: false, message: 'E-mail e senha são obrigatórios.' });
     }
 
     const usuario = await Usuario.findOne({ where: { email } });
     if (!usuario) {
-      return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
+      return res.status(401).json({ success: false, message: 'E-mail ou senha incorretos.' });
     }
 
-    const senhaValida = await bcrypt.compare(senha, usuario.senhaHash);
-    if (!senhaValida) {
-      return res.status(401).json({ error: 'E-mail ou senha incorretos.' });
+    const ok = await bcrypt.compare(senha, usuario.senhaHash);
+    if (!ok) {
+      return res.status(401).json({ success: false, message: 'E-mail ou senha incorretos.' });
     }
 
-    const token = jwt.sign(
-      { id: usuario.id, tipoUsuario: usuario.tipoUsuario },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-    );
+    const token = signToken({ id: usuario.id, tipoUsuario: usuario.tipoUsuario, nome: usuario.nome });
 
-    res.json({
-      usuario: {
-        id: usuario.id,
-        nome: usuario.nome,
-        email: usuario.email,
-        tipoUsuario: usuario.tipoUsuario
+    return res.json({
+      success: true,
+      data: {
+        usuario: {
+          id: usuario.id,
+          nome: usuario.nome,
+          email: usuario.email,
+          tipoUsuario: usuario.tipoUsuario,
+        },
+        token,
       },
-      token
+      message: 'Login realizado com sucesso.',
     });
   } catch (error) {
-    console.error('❌ Erro ao fazer login:', error);
-    res.status(500).json({ error: 'Erro interno ao fazer login.' });
+    console.error('❌ loginUsuario:', error);
+    return res.status(500).json({ success: false, message: 'Erro interno ao fazer login.' });
   }
 };
 
-/**
- * ===================================
- * RECUPERAÇÃO DE SENHA
- * ===================================
- */
-
-// (1) Solicitar recuperação de senha
+// === Solicitar recuperação ===
 export const solicitarRecuperacaoSenha = async (req, res) => {
   try {
-    const { email } = req.body;
+    let { email } = req.body || {};
+    email = (email || '').trim().toLowerCase();
 
     if (!email) {
-      return res.status(400).json({ error: 'E-mail é obrigatório.' });
+      return res.status(400).json({ success: false, message: 'E-mail é obrigatório.' });
     }
 
     const usuario = await Usuario.findOne({ where: { email } });
     if (!usuario) {
-      return res.status(404).json({ error: 'E-mail não encontrado.' });
+      return res.status(404).json({ success: false, message: 'E-mail não encontrado.' });
     }
 
-    // Gera token JWT (expira em 15 min)
+    // Token curto para reset
     const token = jwt.sign({ id: usuario.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
-    const linkRecuperacao = `http://localhost:3000/redefinir_senha.html?token=${token}`;
 
-    console.log(`📧 Link de recuperação simulado: ${linkRecuperacao}`);
+    // Link aponta para a página do frontend (sem .html se você usa rotas limpas)
+    const base = getBaseUrl(req);
+    const resetPath = process.env.RESET_PATH || '/redefinir_senha';
+    const linkRecuperacao = `${base}${resetPath}?token=${token}`;
 
-    res.json({
-      message: 'Link de recuperação gerado com sucesso (simulação de envio de e-mail).',
-      link: linkRecuperacao
+    console.log(`📧 Link de recuperação (simulado): ${linkRecuperacao}`);
+
+    return res.json({
+      success: true,
+      data: { link: linkRecuperacao },
+      message: 'Link de recuperação gerado com sucesso.',
     });
   } catch (error) {
-    console.error('❌ Erro ao solicitar recuperação:', error);
-    res.status(500).json({ error: 'Erro ao solicitar recuperação de senha.' });
+    console.error('❌ solicitarRecuperacaoSenha:', error);
+    return res.status(500).json({ success: false, message: 'Erro ao solicitar recuperação de senha.' });
   }
 };
 
-// (2) Redefinir senha
+// === Redefinir senha ===
 export const redefinirSenha = async (req, res) => {
   try {
-    const { token, novaSenha } = req.body;
-
+    const { token, novaSenha } = req.body || {};
     if (!token || !novaSenha) {
-      return res.status(400).json({ error: 'Token e nova senha são obrigatórios.' });
+      return res.status(400).json({ success: false, message: 'Token e nova senha são obrigatórios.' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch {
+      return res.status(400).json({ success: false, message: 'Token inválido ou expirado.' });
+    }
+
     const usuario = await Usuario.findByPk(decoded.id);
-
     if (!usuario) {
-      return res.status(404).json({ error: 'Usuário não encontrado.' });
+      return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
     }
 
-    const senhaHash = await bcrypt.hash(novaSenha, 10);
+    const senhaHash = await bcrypt.hash(String(novaSenha), SALT_ROUNDS);
     usuario.senhaHash = senhaHash;
     await usuario.save();
 
-    res.json({ message: 'Senha redefinida com sucesso!' });
+    return res.json({ success: true, message: 'Senha redefinida com sucesso!' });
   } catch (error) {
-    console.error('❌ Erro ao redefinir senha:', error);
-    res.status(500).json({ error: 'Token inválido ou expirado.' });
+    console.error('❌ redefinirSenha:', error);
+    return res.status(500).json({ success: false, message: 'Erro ao redefinir senha.' });
   }
 };

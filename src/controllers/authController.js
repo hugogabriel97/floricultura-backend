@@ -1,40 +1,67 @@
-const { Usuario } = require('../models');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-require('dotenv').config();
+// src/controllers/authController.js
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { Usuario } from '../models/index.js';
 
-const saltRounds = 10;
+const SALT_ROUNDS = 10;
 
-exports.register = async (req, res) => {
+const signToken = (payload, exp = process.env.JWT_EXPIRES_IN || '7d') =>
+  jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: exp });
+
+export const register = async (req, res) => {
   try {
     const { nome, email, senha, tipoUsuario } = req.body;
-    if (!nome || !email || !senha) return res.status(400).json({ error: 'Dados incompletos' });
+    if (!nome || !email || !senha) {
+      return res.status(400).json({ success: false, message: 'Nome, e-mail e senha são obrigatórios.' });
+    }
 
     const exists = await Usuario.findOne({ where: { email } });
-    if (exists) return res.status(409).json({ error: 'Email já cadastrado' });
+    if (exists) {
+      return res.status(409).json({ success: false, message: 'E-mail já cadastrado.' });
+    }
 
-    const hash = await bcrypt.hash(senha, saltRounds);
-    const user = await Usuario.create({ nome, email, senhaHash: hash, tipoUsuario: tipoUsuario || 'cliente' });
-    return res.status(201).json({ id: user.id, nome: user.nome, email: user.email });
+    const senhaHash = await bcrypt.hash(senha, SALT_ROUNDS);
+    const user = await Usuario.create({
+      nome,
+      email,
+      senhaHash,
+      tipoUsuario: tipoUsuario || 'cliente'
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: { id: user.id, nome: user.nome, email: user.email, tipoUsuario: user.tipoUsuario }
+    });
   } catch (err) {
-    console.error(err); res.status(500).json({ error: 'Erro no servidor' });
+    console.error('❌ register:', err);
+    return res.status(500).json({ success: false, message: 'Erro interno.' });
   }
 };
 
-exports.login = async (req, res) => {
+export const login = async (req, res) => {
   try {
     const { email, senha } = req.body;
-    if (!email || !senha) return res.status(400).json({ error: 'Credenciais incompletas' });
+    if (!email || !senha) {
+      return res.status(400).json({ success: false, message: 'E-mail e senha são obrigatórios.' });
+    }
 
     const user = await Usuario.findOne({ where: { email } });
-    if (!user) return res.status(401).json({ error: 'Usuário não encontrado' });
+    if (!user) return res.status(401).json({ success: false, message: 'E-mail ou senha inválidos.' });
 
-    const match = await bcrypt.compare(senha, user.senhaHash);
-    if (!match) return res.status(401).json({ error: 'Senha inválida' });
+    const ok = await bcrypt.compare(senha, user.senhaHash);
+    if (!ok) return res.status(401).json({ success: false, message: 'E-mail ou senha inválidos.' });
 
-    const token = jwt.sign({ id: user.id, tipoUsuario: user.tipoUsuario, nome: user.nome }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
-    return res.json({ token, user: { id: user.id, nome: user.nome, email: user.email, tipoUsuario: user.tipoUsuario } });
+    const token = signToken({ id: user.id, tipoUsuario: user.tipoUsuario, nome: user.nome });
+
+    return res.json({
+      success: true,
+      data: {
+        token,
+        usuario: { id: user.id, nome: user.nome, email: user.email, tipoUsuario: user.tipoUsuario }
+      }
+    });
   } catch (err) {
-    console.error(err); res.status(500).json({ error: 'Erro no servidor' });
+    console.error('❌ login:', err);
+    return res.status(500).json({ success: false, message: 'Erro interno.' });
   }
 };

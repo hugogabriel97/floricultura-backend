@@ -1,20 +1,47 @@
-const { DataTypes } = require('sequelize');
-const sequelize = require('../config/db');
-const Usuario = require('./usuario');
+// src/models/carrinhoModel.js
+import { DataTypes } from 'sequelize';
+import sequelize from '../config/db.js';
+import Usuario from './usuarioModel.js';
+import Produto from './produtoModel.js';
 
-const MensagemContato = sequelize.define('MensagemContato', {
-  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-  nome: { type: DataTypes.STRING, allowNull: false },
-  email: { type: DataTypes.STRING, allowNull: false, validate: { isEmail: true } },
-  assunto: { type: DataTypes.STRING },
-  mensagem: { type: DataTypes.TEXT, allowNull: false },
-  dataEnvio: { type: DataTypes.DATE, defaultValue: DataTypes.NOW }
+const Carrinho = sequelize.define('Carrinho', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  usuarioId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { model: 'usuarios', key: 'id' },
+    onDelete: 'CASCADE',
+    onUpdate: 'CASCADE'
+  },
+  produtoId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { model: 'produtos', key: 'id' },
+    onDelete: 'CASCADE',
+    onUpdate: 'CASCADE'
+  },
+  quantidade: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 1,
+    validate: { min: 1 }
+  }
 }, {
-  tableName: 'mensagens_contato',
-  timestamps: false
+  tableName: 'carrinho',
+  timestamps: true,
+  indexes: [
+    // Evita linhas duplicadas do mesmo produto para o mesmo usuário
+    { unique: true, fields: ['usuarioId', 'produtoId'] },
+    { fields: ['usuarioId'] }
+  ]
 });
 
-MensagemContato.belongsTo(Usuario, { as: 'usuario', foreignKey: 'usuarioId' });
-Usuario.hasMany(MensagemContato, { foreignKey: 'usuarioId' });
+// Associações (mantemos no arquivo para uso com includes; ainda assim, serão reconfirmadas no index)
+Carrinho.belongsTo(Usuario, { foreignKey: 'usuarioId', as: 'Usuario' });
+Carrinho.belongsTo(Produto, { foreignKey: 'produtoId', as: 'Produto' });
 
-module.exports = MensagemContato;
+export default Carrinho;
