@@ -4,7 +4,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import sequelize, { testConnection } from './config/db.js';
+import sequelize, { testConnection } from './db.js';
 
 // === Rotas da API ===
 import produtosRouter from './routes/produtoRoutes.js';
