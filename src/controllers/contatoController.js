@@ -1,5 +1,5 @@
 // src/controllers/contatoController.js
-import { MensagemContato } from '../models/index.js';
+import { MensagemContato } from '../models/indexModel.js';
 
 const isEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 

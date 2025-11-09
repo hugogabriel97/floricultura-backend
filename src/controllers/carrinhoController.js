@@ -1,5 +1,5 @@
 // src/controllers/carrinhoController.js
-import { Carrinho, Produto } from '../models/index.js';
+import { Carrinho, Produto } from '../models/indexModel.js';
 
 // GET /api/carrinho/:usuarioId
 export const listarCarrinho = async (req, res) => {

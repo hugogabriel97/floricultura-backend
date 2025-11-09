@@ -1,7 +1,7 @@
 // src/controllers/authController.js
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { Usuario } from '../models/index.js';
+import { Usuario } from '../models/indexModel.js';
 
 const SALT_ROUNDS = 10;
 
