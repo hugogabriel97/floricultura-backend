@@ -8,11 +8,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // --- Preferir variáveis do Railway se existirem ---
-const DB_NAME = process.env.DB_NAME || process.env.MYSQLDATABASE || process.env.MYSQL_DB || '';
-const DB_USER = process.env.DB_USER || process.env.MYSQLUSER || process.env.MYSQL_USER || '';
-const DB_PASS = process.env.DB_PASS || process.env.MYSQLPASSWORD || process.env.MYSQL_PASSWORD || '';
-const DB_HOST = process.env.DB_HOST || process.env.MYSQLHOST || process.env.MYSQL_HOST || 'localhost';
-const DB_PORT = Number(process.env.DB_PORT || process.env.MYSQLPORT || process.env.MYSQL_PORT || 3306);
+const DB_NAME = process.env.DB_NAME || process.env.MYSQLDATABASE || process.env.MYSQL_DB || 'floricultura';
+const DB_USER = process.env.DB_USER || process.env.MYSQLUSER || process.env.MYSQL_USER || 'root';
+const DB_PASS = process.env.DB_PASS || process.env.MYSQLPASSWORD || process.env.MYSQL_PASSWORD || 'KXmzmLdvBqecgbHduMnheEqXQGALUefQ';
+const DB_HOST = process.env.DB_HOST || process.env.MYSQLHOST || process.env.MYSQL_HOST || 'centerbeam.proxy.rlwy.net';
+const DB_PORT = Number(process.env.DB_PORT || process.env.MYSQLPORT || process.env.MYSQL_PORT || 46461);
 const DIALECT  = (process.env.DB_DIALECT || 'mysql').toLowerCase();
 
 // --- SSL somente quando necessário ---
