@@ -3,18 +3,14 @@ import { DataTypes } from 'sequelize';
 import sequelize from '../config/db.js';
 
 const Usuario = sequelize.define('Usuario', {
-  id: {
-    type: DataTypes.INTEGER, 
-    autoIncrement: true,
-    primaryKey: true
-  },
+  id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
   nome: {
     type: DataTypes.STRING(120),
     allowNull: false,
     validate: { len: [2, 120] }
   },
   email: {
-    type: DataTypes.STRING(180),
+    type: DataTypes.STRING(160),
     allowNull: false,
     unique: true,
     validate: { isEmail: true }
@@ -33,10 +29,8 @@ const Usuario = sequelize.define('Usuario', {
   }
 }, {
   tableName: 'usuarios',
-  timestamps: false,            // mantenha false se sua tabela não tem createdAt/updatedAt
-  indexes: [
-    { unique: true, fields: ['email'] }
-  ]
+  timestamps: true,
+  indexes: [{ unique: true, fields: ['email'] }]
 });
 
 export default Usuario;

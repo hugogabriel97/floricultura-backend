@@ -1,25 +1,51 @@
-// src/models/index.js
+// src/models/indexModel.js
 import sequelize from '../config/db.js';
-
 import Usuario from './usuarioModel.js';
 import Produto from './produtoModel.js';
 import Carrinho from './carrinhoModel.js';
 import MensagemContato from './mensagemContatoModel.js';
 
-// ===== Associações centralizadas =====
-// Usuário ↔ MensagemContato (opcional)
-Usuario.hasMany(MensagemContato, { foreignKey: 'usuarioId', as: 'mensagens' });
-MensagemContato.belongsTo(Usuario, { foreignKey: 'usuarioId', as: 'usuario' });
+/**
+ * Centralize todas as associações aqui para evitar conflitos de alias.
+ * Mantemos aliases esperados pelos controllers:
+ *  - Carrinho -> belongsTo Usuario as 'Usuario'
+ *  - Carrinho -> belongsTo Produto as 'Produto'
+ */
 
-// Usuário ↔ Carrinho (1:N)
-Usuario.hasMany(Carrinho, { foreignKey: 'usuarioId', as: 'itensCarrinho' });
-Carrinho.belongsTo(Usuario, { foreignKey: 'usuarioId', as: 'Usuario' });
+// Usuario x Carrinho
+Usuario.hasMany(Carrinho, {
+  foreignKey: 'usuarioId',
+  as: 'Carrinhos',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+Carrinho.belongsTo(Usuario, {
+  foreignKey: 'usuarioId',
+  as: 'Usuario'
+});
 
-// Produto ↔ Carrinho (1:N)
-Produto.hasMany(Carrinho, { foreignKey: 'produtoId', as: 'emCarrinhos' });
-Carrinho.belongsTo(Produto, { foreignKey: 'produtoId', as: 'Produto' });
+// Produto x Carrinho
+Produto.hasMany(Carrinho, {
+  foreignKey: 'produtoId',
+  as: 'ItensCarrinho',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE'
+});
+Carrinho.belongsTo(Produto, {
+  foreignKey: 'produtoId',
+  as: 'Produto'
+});
 
-// Exporte tudo organizado
+// Usuario x MensagemContato (opcional)
+Usuario.hasMany(MensagemContato, {
+  foreignKey: 'usuarioId',
+  as: 'Mensagens'
+});
+MensagemContato.belongsTo(Usuario, {
+  foreignKey: 'usuarioId',
+  as: 'Usuario'
+});
+
 export {
   sequelize,
   Usuario,
