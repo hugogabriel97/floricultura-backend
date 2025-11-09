@@ -1,29 +1,30 @@
 // ======================
-// 🌐 SERVER.JS - versão otimizada e corrigida
+// 🌐 SERVER.JS — Backend otimizado para o Railway
 // ======================
+
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import sequelize from './config/db.js';
+import sequelize, { testConnection } from './config/db.js';
 
-// === Rotas de API ===
+// === Rotas da API ===
 import produtosRouter from './routes/produtoRoutes.js';
 import usuariosRouter from './routes/usuarioRoutes.js';
 import carrinhoRouter from './routes/carrinhoRoutes.js';
 
-// === Modelos (registram tabelas no Sequelize) ===
+// === Modelos (registra tabelas no Sequelize) ===
 import './models/produtoModel.js';
 import './models/usuarioModel.js';
 import './models/carrinhoModel.js';
 
-// === Configuração de ambiente ===
+// === Configurações de ambiente ===
 dotenv.config();
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Corrigir __dirname para ES Modules
+// Corrigir __dirname (ESM)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -33,28 +34,29 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // ======================
-// 🧩 MIDDLEWARES GERAIS
+// 🧩 MIDDLEWARES
 // ======================
-app.use(cors({
-  origin: process.env.CORS_ORIGIN?.split(',') || [
-    'http://127.0.0.1:5500',
-    'http://localhost:5500'
-  ],
-  credentials: true
-}));
+app.use(
+  cors({
+    origin:
+      process.env.CORS_ORIGIN?.split(',') || [
+        'http://localhost:5500',
+        'http://127.0.0.1:5500',
+      ],
+    credentials: true,
+  })
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ======================
-// 🗂️ FRONTEND E UPLOADS
+// 🗂️ FRONTEND (arquivos estáticos)
 // ======================
 const FRONTEND_PATH = path.resolve(__dirname, '../../frontend');
 
-// Servir arquivos estáticos (HTML, CSS, JS, imagens, etc.)
+// Servir frontend estático
 app.use(express.static(FRONTEND_PATH));
-
-// Servir imagens enviadas (uploads)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // ======================
@@ -67,13 +69,10 @@ app.use('/api/carrinho', carrinhoRouter);
 // ======================
 // 🧭 ROTAS DO FRONTEND
 // ======================
-
-// Página inicial
 app.get('/', (req, res) => {
   res.sendFile(path.join(FRONTEND_PATH, 'index.html'));
 });
 
-// Rotas “limpas” sem .html (melhor UX e compatível com ?token=XYZ)
 const frontendRoutes = [
   'login',
   'registro',
@@ -84,19 +83,19 @@ const frontendRoutes = [
   'produto',
   'carrinho',
   'contato',
-  'sobre'
+  'sobre',
 ];
 
-frontendRoutes.forEach(route => {
+frontendRoutes.forEach((route) => {
   app.get(`/${route}`, (req, res) => {
     res.sendFile(path.join(FRONTEND_PATH, `${route}.html`));
   });
 });
 
-// Caso alguém acesse manualmente com o .html (fallback)
+// Fallback para arquivos .html diretos
 app.get('/*.html', (req, res) => {
   const filePath = path.join(FRONTEND_PATH, req.path);
-  res.sendFile(filePath, err => {
+  res.sendFile(filePath, (err) => {
     if (err) res.status(404).send('Página não encontrada.');
   });
 });
@@ -114,27 +113,26 @@ app.use((err, req, res, next) => {
 });
 
 // ======================
-// 🚀 INICIALIZAÇÃO
+// 🚀 INICIALIZAÇÃO DO SERVIDOR
 // ======================
 (async () => {
   try {
-    console.log('⏳ Conectando ao banco de dados...');
-    await sequelize.authenticate();
-    console.log('✅ Conexão com o banco de dados estabelecida.');
+    console.log('⏳ Tentando conectar ao banco de dados...');
+    await testConnection();
 
     if (NODE_ENV === 'development') {
       await sequelize.sync({ alter: true });
-      console.log('🛠️ Banco de dados sincronizado (modo desenvolvimento).');
+      console.log('🛠️ Banco de dados sincronizado (modo dev).');
     }
 
-    const server = app.listen(PORT, () => {
-      console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Servidor rodando na porta ${PORT}`);
       console.log(`🌐 Ambiente: ${NODE_ENV}`);
     });
 
-    // Encerramento gracioso
+    // Graceful shutdown
     const shutdown = (signal) => {
-      console.log(`\n📴 Recebido ${signal}. Encerrando servidor com segurança...`);
+      console.log(`\n📴 Recebido ${signal}. Encerrando servidor...`);
       server.close(() => {
         console.log('✅ Servidor finalizado com sucesso.');
         process.exit(0);
@@ -143,9 +141,8 @@ app.use((err, req, res, next) => {
 
     process.on('SIGINT', () => shutdown('SIGINT'));
     process.on('SIGTERM', () => shutdown('SIGTERM'));
-
-  } catch (err) {
-    console.error('❌ Falha ao conectar ou sincronizar banco de dados:', err);
+  } catch (error) {
+    console.error('❌ Falha ao iniciar o servidor:', error);
     process.exit(1);
   }
 })();
