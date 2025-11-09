@@ -1,145 +1,71 @@
+// ======================
+// 💾 DB.JS — Conexão MySQL (Railway Ready)
+// ======================
 
-import express from 'express';
-import cors from 'cors';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { Sequelize } from 'sequelize';
 import dotenv from 'dotenv';
-import sequelize, { testConnection } from './db.js';
 
-// === Rotas da API ===
-import produtosRouter from './routes/produtoRoutes.js';
-import usuariosRouter from './routes/usuarioRoutes.js';
-import carrinhoRouter from './routes/carrinhoRoutes.js';
-
-// === Modelos (registra tabelas no Sequelize) ===
-import './models/produtoModel.js';
-import './models/usuarioModel.js';
-import './models/carrinhoModel.js';
-
-// === Configurações de ambiente ===
 dotenv.config();
-const PORT = process.env.PORT || 3000;
-const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Corrigir __dirname (ESM)
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// --- Preferir variáveis do Railway se existirem ---
+const DB_NAME = process.env.DB_NAME || process.env.MYSQLDATABASE || process.env.MYSQL_DB || '';
+const DB_USER = process.env.DB_USER || process.env.MYSQLUSER || process.env.MYSQL_USER || '';
+const DB_PASS = process.env.DB_PASS || process.env.MYSQLPASSWORD || process.env.MYSQL_PASSWORD || '';
+const DB_HOST = process.env.DB_HOST || process.env.MYSQLHOST || process.env.MYSQL_HOST || 'localhost';
+const DB_PORT = Number(process.env.DB_PORT || process.env.MYSQLPORT || process.env.MYSQL_PORT || 3306);
+const DIALECT  = (process.env.DB_DIALECT || 'mysql').toLowerCase();
 
-// ======================
-// 🚀 Inicialização do Express
-// ======================
-const app = express();
+// --- SSL somente quando necessário ---
+// 1) Forçar com DB_SSL=true
+// 2) OU auto-ativar se host do Railway Proxy (termina com .proxy.rlwy.net)
+const shouldUseSSL =
+  String(process.env.DB_SSL || '').toLowerCase() === 'true' ||
+  /\.proxy\.rlwy\.net$/i.test(DB_HOST);
 
-// ======================
-// 🧩 MIDDLEWARES
-// ======================
-app.use(
-  cors({
-    origin:
-      process.env.CORS_ORIGIN?.split(',') || [
-        'http://localhost:5500',
-        'http://127.0.0.1:5500',
-      ],
-    credentials: true,
-  })
-);
+const sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASS, {
+  host: DB_HOST,
+  port: DB_PORT,
+  dialect: DIALECT,
+  // Em produção, deixe silencioso; em dev, mostre queries
+  logging: process.env.NODE_ENV === 'development' ? console.log : false,
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+  // Timezone para consistência (escrita/leitura em UTC)
+  timezone: '+00:00',
 
-// ======================
-// 🗂️ FRONTEND (arquivos estáticos)
-// ======================
-const FRONTEND_PATH = path.resolve(__dirname, '../../frontend');
+  dialectOptions: {
+    // No MySQL, este 'timezone' dentro de dialectOptions é ignorado pelo driver,
+    // mas deixamos aqui por compatibilidade futura.
+    timezone: 'Z',
+    ssl: shouldUseSSL
+      ? {
+          require: true,
+          rejectUnauthorized: false, // proxies do Railway não têm CA pública
+        }
+      : undefined,
+  },
 
-// Servir frontend estático
-app.use(express.static(FRONTEND_PATH));
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+  // Pool recomendado para ambientes serverless/PaaS
+  pool: {
+    max: 10,
+    min: 0,
+    acquire: 30_000, // tempo máx esperando conexão
+    idle: 10_000,    // fecha conexões ociosas
+  },
 
-// ======================
-// 🔗 ROTAS DE API
-// ======================
-app.use('/api/produtos', produtosRouter);
-app.use('/api/usuarios', usuariosRouter);
-app.use('/api/carrinho', carrinhoRouter);
-
-// ======================
-// 🧭 ROTAS DO FRONTEND
-// ======================
-app.get('/', (req, res) => {
-  res.sendFile(path.join(FRONTEND_PATH, 'index.html'));
+  // Evita deprecações do mysql2 com big numbers
+  define: {
+    underscored: false,
+    freezeTableName: false,
+  },
 });
 
-const frontendRoutes = [
-  'login',
-  'registro',
-  'recuperar_senha',
-  'redefinir_senha',
-  'admin_produtos',
-  'produtos',
-  'produto',
-  'carrinho',
-  'contato',
-  'sobre',
-];
+// Log resumido (sem senha) — útil em deploys
+if (process.env.NODE_ENV !== 'test') {
+  const safeHost = DB_HOST;
+  console.log(
+    `🔗 Sequelize: ${DIALECT}://${DB_USER || '(no-user)'}@${safeHost}:${DB_PORT}/${DB_NAME || '(no-db)'} ` +
+    `(ssl=${shouldUseSSL ? 'on' : 'off'})`
+  );
+}
 
-frontendRoutes.forEach((route) => {
-  app.get(`/${route}`, (req, res) => {
-    res.sendFile(path.join(FRONTEND_PATH, `${route}.html`));
-  });
-});
-
-// Fallback para arquivos .html diretos
-app.get('/*.html', (req, res) => {
-  const filePath = path.join(FRONTEND_PATH, req.path);
-  res.sendFile(filePath, (err) => {
-    if (err) res.status(404).send('Página não encontrada.');
-  });
-});
-
-// ======================
-// ⚠️ TRATAMENTO DE ERROS
-// ======================
-app.use((req, res) => {
-  res.status(404).json({ error: 'Rota não encontrada.' });
-});
-
-app.use((err, req, res, next) => {
-  console.error('❌ Erro interno:', err);
-  res.status(500).json({ error: 'Erro interno no servidor.' });
-});
-
-// ======================
-// 🚀 INICIALIZAÇÃO DO SERVIDOR
-// ======================
-(async () => {
-  try {
-    console.log('⏳ Tentando conectar ao banco de dados...');
-    await testConnection();
-
-    if (NODE_ENV === 'development') {
-      await sequelize.sync({ alter: true });
-      console.log('🛠️ Banco de dados sincronizado (modo dev).');
-    }
-
-    const server = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Servidor rodando na porta ${PORT}`);
-      console.log(`🌐 Ambiente: ${NODE_ENV}`);
-    });
-
-    // Graceful shutdown
-    const shutdown = (signal) => {
-      console.log(`\n📴 Recebido ${signal}. Encerrando servidor...`);
-      server.close(() => {
-        console.log('✅ Servidor finalizado com sucesso.');
-        process.exit(0);
-      });
-    };
-
-    process.on('SIGINT', () => shutdown('SIGINT'));
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-  } catch (error) {
-    console.error('❌ Falha ao iniciar o servidor:', error);
-    process.exit(1);
-  }
-})();
+export default sequelize;

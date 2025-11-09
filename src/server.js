@@ -1,144 +1,139 @@
-// ======================
-// 🌐 SERVER.JS — Backend otimizado para o Railway
-// ======================
-
+// src/server.js
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import sequelize, { testConnection } from './config/db.js';
+import sequelize from './config/db.js';
 
-// === Rotas da API ===
+// Rotas de API
 import produtosRouter from './routes/produtoRoutes.js';
 import usuariosRouter from './routes/usuarioRoutes.js';
 import carrinhoRouter from './routes/carrinhoRoutes.js';
 
-// === Modelos (registra tabelas no Sequelize) ===
+// Models (registram as tabelas no Sequelize)
 import './models/produtoModel.js';
 import './models/usuarioModel.js';
 import './models/carrinhoModel.js';
 
-// === Configurações de ambiente ===
+// ===== Config =====
 dotenv.config();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // Corrigir __dirname (ESM)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ======================
-// 🚀 Inicialização do Express
-// ======================
+// Caminho do frontend (opcional: só serve se você estiver subindo o front junto)
+const FRONTEND_PATH = path.resolve(__dirname, '../../frontend');
+
+// ===== App =====
 const app = express();
 
-// ======================
-// 🧩 MIDDLEWARES
-// ======================
+// Em plataformas como Railway, há proxy: habilite para pegar IP e protocolo corretos.
+app.set('trust proxy', 1);
+
+// ===== Middlewares =====
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// CORS: em produção, use CORS_ORIGIN com a(s) URL(s) do seu frontend (separadas por vírgula).
+const allowedOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin:
-      process.env.CORS_ORIGIN?.split(',') || [
-        'http://localhost:5500',
-        'http://127.0.0.1:5500',
-      ],
+    origin: allowedOrigins.length
+      ? allowedOrigins
+      : ['http://localhost:5500', 'http://127.0.0.1:5500'],
     credentials: true,
   })
 );
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// ======================
-// 🗂️ FRONTEND (arquivos estáticos)
-// ======================
-const FRONTEND_PATH = path.resolve(__dirname, '../../frontend');
-
-// Servir frontend estático
+// ===== Static (opcional) =====
+// Se você está hospedando o frontend separadamente (ex.: em Static do Railway), isso é opcional.
+// Mantive pois você já tinha. Se não existir, não quebra nada.
 app.use(express.static(FRONTEND_PATH));
+// uploads locais (se usar upload no backend)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// ======================
-// 🔗 ROTAS DE API
-// ======================
+// ===== Healthchecks (Railway/Load Balancer) =====
+app.get('/healthz', (_req, res) => res.status(200).json({ ok: true }));
+app.get('/api/health', async (_req, res) => {
+  try {
+    await sequelize.authenticate();
+    return res.json({ ok: true, db: 'connected' });
+  } catch (e) {
+    return res.status(500).json({ ok: false, db: 'disconnected', error: e?.message });
+  }
+});
+
+// ===== Rotas de API =====
 app.use('/api/produtos', produtosRouter);
 app.use('/api/usuarios', usuariosRouter);
 app.use('/api/carrinho', carrinhoRouter);
 
-// ======================
-// 🧭 ROTAS DO FRONTEND
-// ======================
-app.get('/', (req, res) => {
-  res.sendFile(path.join(FRONTEND_PATH, 'index.html'));
-});
-
+// ===== Rotas do Frontend (opcional) =====
 const frontendRoutes = [
-  'login',
-  'registro',
-  'recuperar_senha',
-  'redefinir_senha',
-  'admin_produtos',
-  'produtos',
-  'produto',
-  'carrinho',
-  'contato',
-  'sobre',
+  '/', 'login', 'registro', 'recuperar_senha', 'redefinir_senha',
+  'admin_produtos', 'produtos', 'produto', 'carrinho', 'contato', 'sobre',
 ];
 
-frontendRoutes.forEach((route) => {
+// Rotas “limpas”: /login, /produtos, etc.
+frontendRoutes.forEach(route => {
   app.get(`/${route}`, (req, res) => {
-    res.sendFile(path.join(FRONTEND_PATH, `${route}.html`));
+    const file = route === '/' ? 'index' : route;
+    res.sendFile(path.join(FRONTEND_PATH, `${file}.html`));
   });
 });
 
-// Fallback para arquivos .html diretos
+// Fallback para acessos diretos com .html
 app.get('/*.html', (req, res) => {
-  const filePath = path.join(FRONTEND_PATH, req.path);
-  res.sendFile(filePath, (err) => {
+  res.sendFile(path.join(FRONTEND_PATH, req.path), err => {
     if (err) res.status(404).send('Página não encontrada.');
   });
 });
 
-// ======================
-// ⚠️ TRATAMENTO DE ERROS
-// ======================
+// ===== 404 & Error Handler =====
 app.use((req, res) => {
   res.status(404).json({ error: 'Rota não encontrada.' });
 });
 
-app.use((err, req, res, next) => {
+app.use((err, _req, res, _next) => {
   console.error('❌ Erro interno:', err);
   res.status(500).json({ error: 'Erro interno no servidor.' });
 });
 
-// ======================
-// 🚀 INICIALIZAÇÃO DO SERVIDOR
-// ======================
+// ===== Bootstrap =====
 (async () => {
   try {
-    console.log('⏳ Tentando conectar ao banco de dados...');
-    await testConnection();
+    console.log('⏳ Conectando ao banco de dados...');
+    await sequelize.authenticate();
+    console.log('✅ Conexão com o banco de dados estabelecida.');
 
+    // Em dev, sincroniza; em prod (Railway), normalmente não sincroniza automaticamente.
     if (NODE_ENV === 'development') {
       await sequelize.sync({ alter: true });
-      console.log('🛠️ Banco de dados sincronizado (modo dev).');
+      console.log('🛠️ Banco de dados sincronizado (dev).');
     }
 
+    // Railway precisa bind em 0.0.0.0
     const server = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Servidor rodando na porta ${PORT}`);
+      console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
       console.log(`🌐 Ambiente: ${NODE_ENV}`);
     });
 
-    // Graceful shutdown
+    // Encerramento gracioso
     const shutdown = (signal) => {
-      console.log(`\n📴 Recebido ${signal}. Encerrando servidor...`);
+      console.log(`\n📴 Recebido ${signal}. Encerrando servidor com segurança...`);
       server.close(() => {
         console.log('✅ Servidor finalizado com sucesso.');
         process.exit(0);
       });
     };
-
     process.on('SIGINT', () => shutdown('SIGINT'));
     process.on('SIGTERM', () => shutdown('SIGTERM'));
   } catch (error) {
