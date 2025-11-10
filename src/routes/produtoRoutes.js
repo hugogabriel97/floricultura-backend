@@ -1,3 +1,4 @@
+// src/routes/produtoRoutes.js
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
@@ -5,7 +6,8 @@ import {
   criarProduto,
   listarProdutos,
   atualizarProduto,
-  deletarProduto
+  deletarProduto,
+  obterProdutoPorId // ✅ CORREÇÃO: Função importada que estava faltando
 } from '../controllers/produtoController.js';
 
 const router = express.Router();
@@ -30,9 +32,11 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({ storage, fileFilter });
 
 // === Rotas ===
+// A ordem está correta, / primeiro, depois /:id
 router.get('/', listarProdutos);
 router.post('/', upload.single('imagem'), criarProduto);
 router.put('/:id', upload.single('imagem'), atualizarProduto);
 router.delete('/:id', deletarProduto);
+router.get('/:id', obterProdutoPorId); // Esta rota agora vai funcionar
 
 export default router;
