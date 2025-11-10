@@ -22,6 +22,21 @@ export const listarProdutos = async (_req, res) => {
   }
 };
 
+export const obterProdutoPorId = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const produto = await Produto.findByPk(id);
+
+    if (!produto)
+      return res.status(404).json({ success: false, message: "Produto não encontrado." });
+
+    return res.json(produto);
+  } catch (err) {
+    console.error("❌ obterProdutoPorId:", err);
+    return res.status(500).json({ success: false, message: "Erro ao buscar produto." });
+  }
+};
+
 export const criarProduto = async (req, res) => {
   try {
     const { nome, descricao, preco, categoria, quantidadeEstoque } = req.body;
