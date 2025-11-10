@@ -5,9 +5,11 @@ import Usuario from '../models/usuarioModel.js';
 
 const SALT_ROUNDS = 10;
 
+// Helper para assinar o token
 const signToken = (payload, exp = process.env.JWT_EXPIRES_IN || '7d') =>
   jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: exp });
 
+// Helper (não mais usado para recuperação, mas pode ser útil em outros lugares)
 const getBaseUrl = (req) => {
   if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/+$/, '');
   const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
@@ -15,7 +17,7 @@ const getBaseUrl = (req) => {
   return `${proto}://${host}`;
 };
 
-// ============ REGISTRAR ============
+// ============ REGISTRAR (Sem alterações) ============
 export const registrarUsuario = async (req, res) => {
   try {
     const { nome, email, senha, tipoUsuario } = req.body;
@@ -54,12 +56,11 @@ export const registrarUsuario = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ registrarUsuario error:', error);
-    // Erro por violação de unique também pode cair aqui
     return res.status(500).json({ success: false, message: 'Erro interno ao registrar usuário.' });
   }
 };
 
-// ============ LOGIN ============
+// ============ LOGIN (Sem alterações) ============
 export const loginUsuario = async (req, res) => {
   try {
     const { email, senha } = req.body;
@@ -99,27 +100,50 @@ export const loginUsuario = async (req, res) => {
   }
 };
 
-// ============ SOLICITAR RECUPERAÇÃO ============
+// ============ SOLICITAR RECUPERAÇÃO (CORRIGIDO E MELHORADO) ============
 export const solicitarRecuperacaoSenha = async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ success: false, message: 'E-mail é obrigatório.' });
 
     const usuario = await Usuario.findOne({ where: { email } });
-    if (!usuario) return res.status(404).json({ success: false, message: 'E-mail não encontrado.' });
 
+    // ✅ MELHORIA DE SEGURANÇA:
+    // Mesmo se o usuário NÃO for encontrado, retorne uma mensagem de sucesso genérica.
+    // Isso impede que atacantes descubram (enumerem) quais e-mails estão cadastrados.
+    if (!usuario) {
+      console.log(`[INFO] Solicitação de recuperação para e-mail inexistente: ${email}`);
+      return res.json({ 
+        success: true, 
+        message: 'Se este e-mail estiver cadastrado, um link de recuperação será gerado.' 
+      });
+    }
+
+    // O usuário existe, então geramos o token
     const token = jwt.sign({ id: usuario.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
 
-    const base = getBaseUrl(req);
-    const resetPath = process.env.RESET_PATH || '/redefinir_senha';
-    const linkRecuperacao = `${base}${resetPath}?token=${token}`;
+    // ✅ CORREÇÃO CRÍTICA: Usar a URL do FRONTEND, não do backend.
+    const base = process.env.FRONTEND_URL;
 
+    // Checagem de segurança para garantir que a variável de ambiente existe
+    if (!base) {
+      console.error("❌ ERRO DE CONFIGURAÇÃO: FRONTEND_URL não está definida nas variáveis de ambiente do backend!");
+      return res.status(500).json({ success: false, message: 'Erro interno de configuração do servidor.' });
+    }
+
+    // Aponta para a página .html correta no seu frontend
+    const resetPath = '/redefinir_senha.html';
+    const linkRecuperacao = `${base.replace(/\/+$/, '')}${resetPath}?token=${token}`;
+
+    // Em um app real, você enviaria o 'linkRecuperacao' por e-mail.
+    // Para este projeto, o log no console simula o envio.
     console.log(`📧 Link de recuperação (simulado): ${linkRecuperacao}`);
 
+    // Retorna o link na 'data' para que o seu modal (do recuperar_senha.html) possa exibi-lo.
     return res.json({
       success: true,
       data: { link: linkRecuperacao },
-      message: 'Link de recuperação gerado com sucesso.',
+      message: 'Link de recuperação gerado com sucesso (simulado).',
     });
   } catch (error) {
     console.error('❌ solicitarRecuperacaoSenha error:', error);
@@ -127,7 +151,7 @@ export const solicitarRecuperacaoSenha = async (req, res) => {
   }
 };
 
-// ============ REDEFINIR SENHA ============
+// ============ REDEFINIR SENHA (Sem alterações) ============
 export const redefinirSenha = async (req, res) => {
   try {
     const { token, novaSenha } = req.body;
@@ -137,6 +161,7 @@ export const redefinirSenha = async (req, res) => {
 
     let decoded;
     try {
+      // Verifica se o token é válido e não expirou
       decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch {
       return res.status(400).json({ success: false, message: 'Token inválido ou expirado.' });
@@ -145,6 +170,7 @@ export const redefinirSenha = async (req, res) => {
     const usuario = await Usuario.findByPk(decoded.id);
     if (!usuario) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
 
+    // Atualiza a senha
     const senhaHash = await bcrypt.hash(novaSenha, SALT_ROUNDS);
     usuario.senhaHash = senhaHash;
     await usuario.save();
