@@ -25,10 +25,17 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.set('trust proxy', 1);
 
-// CORS – libera o domínio deployado do seu frontend automaticamente
+// ✅ AJUSTE FEITO: Configuração de CORS explícita
+// Isso garante que seu backend aceite requisições do seu frontend
+const FRONTEND_URL = 'https://floricultura-frontend-production.up.railway.app';
+
 app.use(
   cors({
-    origin: (origin, cb) => cb(null, true),
+    origin: [
+      FRONTEND_URL,
+      'http://localhost:3000', // Para seu dev local do backend
+      'http://127.0.0.1:5500', // Para seu dev local do frontend (Live Server)
+    ],
     credentials: true,
   })
 );
@@ -81,17 +88,15 @@ app.use((err, req, res, next) => {
 // Boot
 (async () => {
   try {
-    console.log(
-      `🔗 Sequelize: mysql://${process.env.DB_USER}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME} (ssl=${process.env.NODE_ENV === 'production' ? 'on' : 'off'})`
-    );
+    // ✅ AJUSTE: Log de conexão removido daqui. O 'db.js' já faz um log melhor.
     await sequelize.authenticate();
     console.log('✅ Conexão com o banco estabelecida.');
 
-    // Em produção NÃO use { alter: true }.
-    if (NODE_ENV === 'development') {
-      await sequelize.sync({ alter: true });
-      console.log('🛠️ Banco sincronizado (dev).');
-    }
+    // ✅ AJUSTE CRÍTICO:
+    // Isso garante que suas tabelas sejam criadas/atualizadas no Railway (produção)
+    // A lógica antiga `if (NODE_ENV === 'development')` impedia isso.
+    await sequelize.sync({ alter: true });
+    console.log('🛠️ Modelos sincronizados com o banco de dados.');
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server on http://localhost:${PORT} — env: ${NODE_ENV}`);
