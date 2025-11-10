@@ -1,18 +1,13 @@
 // src/controllers/usuarioController.js
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { Usuario } from '../models/indexModel.js';
+import Usuario from '../models/usuarioModel.js';
 
 const SALT_ROUNDS = 10;
 
 const signToken = (payload, exp = process.env.JWT_EXPIRES_IN || '7d') =>
   jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: exp });
 
-/**
- * Retorna a base URL do frontend.
- * - Em produção, use BASE_URL (ex.: https://seu-front.app)
- * - Em dev, tenta montar via proxy/host da requisição
- */
 const getBaseUrl = (req) => {
   if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/+$/, '');
   const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
@@ -20,20 +15,17 @@ const getBaseUrl = (req) => {
   return `${proto}://${host}`;
 };
 
-// === Registrar ===
+// ============ REGISTRAR ============
 export const registrarUsuario = async (req, res) => {
   try {
-    let { nome, email, senha, tipoUsuario } = req.body || {};
-    nome = (nome || '').trim();
-    email = (email || '').trim().toLowerCase();
-    senha = String(senha || '');
+    const { nome, email, senha, tipoUsuario } = req.body;
 
     if (!nome || !email || !senha) {
       return res.status(400).json({ success: false, message: 'Nome, e-mail e senha são obrigatórios.' });
     }
 
-    const exists = await Usuario.findOne({ where: { email } });
-    if (exists) {
+    const existente = await Usuario.findOne({ where: { email } });
+    if (existente) {
       return res.status(409).json({ success: false, message: 'E-mail já cadastrado.' });
     }
 
@@ -45,7 +37,7 @@ export const registrarUsuario = async (req, res) => {
       tipoUsuario: tipoUsuario || 'cliente',
     });
 
-    const token = signToken({ id: novoUsuario.id, tipoUsuario: novoUsuario.tipoUsuario, nome: novoUsuario.nome });
+    const token = signToken({ id: novoUsuario.id, tipoUsuario: novoUsuario.tipoUsuario });
 
     return res.status(201).json({
       success: true,
@@ -58,20 +50,19 @@ export const registrarUsuario = async (req, res) => {
         },
         token,
       },
-      message: 'Usuário registrado com sucesso.',
+      message: 'Conta criada com sucesso.',
     });
   } catch (error) {
-    console.error('❌ registrarUsuario:', error);
+    console.error('❌ registrarUsuario error:', error);
+    // Erro por violação de unique também pode cair aqui
     return res.status(500).json({ success: false, message: 'Erro interno ao registrar usuário.' });
   }
 };
 
-// === Login ===
+// ============ LOGIN ============
 export const loginUsuario = async (req, res) => {
   try {
-    let { email, senha } = req.body || {};
-    email = (email || '').trim().toLowerCase();
-    senha = String(senha || '');
+    const { email, senha } = req.body;
 
     if (!email || !senha) {
       return res.status(400).json({ success: false, message: 'E-mail e senha são obrigatórios.' });
@@ -87,7 +78,7 @@ export const loginUsuario = async (req, res) => {
       return res.status(401).json({ success: false, message: 'E-mail ou senha incorretos.' });
     }
 
-    const token = signToken({ id: usuario.id, tipoUsuario: usuario.tipoUsuario, nome: usuario.nome });
+    const token = signToken({ id: usuario.id, tipoUsuario: usuario.tipoUsuario });
 
     return res.json({
       success: true,
@@ -100,33 +91,25 @@ export const loginUsuario = async (req, res) => {
         },
         token,
       },
-      message: 'Login realizado com sucesso.',
+      message: 'Login efetuado com sucesso.',
     });
   } catch (error) {
-    console.error('❌ loginUsuario:', error);
+    console.error('❌ loginUsuario error:', error);
     return res.status(500).json({ success: false, message: 'Erro interno ao fazer login.' });
   }
 };
 
-// === Solicitar recuperação ===
+// ============ SOLICITAR RECUPERAÇÃO ============
 export const solicitarRecuperacaoSenha = async (req, res) => {
   try {
-    let { email } = req.body || {};
-    email = (email || '').trim().toLowerCase();
-
-    if (!email) {
-      return res.status(400).json({ success: false, message: 'E-mail é obrigatório.' });
-    }
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ success: false, message: 'E-mail é obrigatório.' });
 
     const usuario = await Usuario.findOne({ where: { email } });
-    if (!usuario) {
-      return res.status(404).json({ success: false, message: 'E-mail não encontrado.' });
-    }
+    if (!usuario) return res.status(404).json({ success: false, message: 'E-mail não encontrado.' });
 
-    // Token curto para reset
     const token = jwt.sign({ id: usuario.id }, process.env.JWT_SECRET, { expiresIn: '15m' });
 
-    // Link aponta para a página do frontend (sem .html se você usa rotas limpas)
     const base = getBaseUrl(req);
     const resetPath = process.env.RESET_PATH || '/redefinir_senha';
     const linkRecuperacao = `${base}${resetPath}?token=${token}`;
@@ -139,15 +122,15 @@ export const solicitarRecuperacaoSenha = async (req, res) => {
       message: 'Link de recuperação gerado com sucesso.',
     });
   } catch (error) {
-    console.error('❌ solicitarRecuperacaoSenha:', error);
+    console.error('❌ solicitarRecuperacaoSenha error:', error);
     return res.status(500).json({ success: false, message: 'Erro ao solicitar recuperação de senha.' });
   }
 };
 
-// === Redefinir senha ===
+// ============ REDEFINIR SENHA ============
 export const redefinirSenha = async (req, res) => {
   try {
-    const { token, novaSenha } = req.body || {};
+    const { token, novaSenha } = req.body;
     if (!token || !novaSenha) {
       return res.status(400).json({ success: false, message: 'Token e nova senha são obrigatórios.' });
     }
@@ -160,17 +143,15 @@ export const redefinirSenha = async (req, res) => {
     }
 
     const usuario = await Usuario.findByPk(decoded.id);
-    if (!usuario) {
-      return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
-    }
+    if (!usuario) return res.status(404).json({ success: false, message: 'Usuário não encontrado.' });
 
-    const senhaHash = await bcrypt.hash(String(novaSenha), SALT_ROUNDS);
+    const senhaHash = await bcrypt.hash(novaSenha, SALT_ROUNDS);
     usuario.senhaHash = senhaHash;
     await usuario.save();
 
     return res.json({ success: true, message: 'Senha redefinida com sucesso!' });
   } catch (error) {
-    console.error('❌ redefinirSenha:', error);
+    console.error('❌ redefinirSenha error:', error);
     return res.status(500).json({ success: false, message: 'Erro ao redefinir senha.' });
   }
 };
