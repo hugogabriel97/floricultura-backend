@@ -4,6 +4,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import fs from 'fs'; // ✅ AJUSTE 1: Importar o File System
 import sequelize from './config/db.js';
 
 import produtosRouter from './routes/produtoRoutes.js';
@@ -25,16 +26,14 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.set('trust proxy', 1);
 
-// ✅ AJUSTE FEITO: Configuração de CORS explícita
-// Isso garante que seu backend aceite requisições do seu frontend
+// Configuração de CORS (Está correta)
 const FRONTEND_URL = 'https://floricultura-frontend-production.up.railway.app';
-
 app.use(
   cors({
     origin: [
       FRONTEND_URL,
-      'http://localhost:3000', // Para seu dev local do backend
-      'http://127.0.0.1:5500', // Para seu dev local do frontend (Live Server)
+      'http://localhost:3000',
+      'http://127.0.0.1:5500',
     ],
     credentials: true,
   })
@@ -43,10 +42,13 @@ app.use(
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// (Opcional) servir frontend estático se estiver no mesmo serviço
+// (Opcional) servir frontend estático (Está correto)
 const FRONTEND_PATH = path.resolve(__dirname, '../../frontend');
 app.use(express.static(FRONTEND_PATH));
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+// Servir a pasta de uploads (Está correto)
+// O path.resolve garante que o caminho /uploads aponte para a pasta 'uploads' na raiz do projeto
+app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')));
 
 // Healthcheck e debug
 app.get('/health', (req, res) => res.json({ ok: true, env: NODE_ENV }));
@@ -88,13 +90,16 @@ app.use((err, req, res, next) => {
 // Boot
 (async () => {
   try {
-    // ✅ AJUSTE: Log de conexão removido daqui. O 'db.js' já faz um log melhor.
+    // ✅ AJUSTE 2: Garantir que o diretório de uploads existe
+    const UPLOADS_DIR = path.resolve(__dirname, '../uploads');
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+      console.log(`📁 Diretório de uploads criado em: ${UPLOADS_DIR}`);
+    }
+
     await sequelize.authenticate();
     console.log('✅ Conexão com o banco estabelecida.');
 
-    // ✅ AJUSTE CRÍTICO:
-    // Isso garante que suas tabelas sejam criadas/atualizadas no Railway (produção)
-    // A lógica antiga `if (NODE_ENV === 'development')` impedia isso.
     await sequelize.sync({ alter: true });
     console.log('🛠️ Modelos sincronizados com o banco de dados.');
 
