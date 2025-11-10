@@ -1,6 +1,10 @@
-const router = require('express').Router();
-const contatoController = require('../controllers/contatoController');
+// src/routes/contatoRoutes.js
+import { Router } from 'express';
+import { send } from '../controllers/contatoController.js';
 
-router.post('/', contatoController.send);
+const router = Router();
 
-module.exports = router;
+// POST /api/contato/
+router.post('/', send);
+
+export default router;
