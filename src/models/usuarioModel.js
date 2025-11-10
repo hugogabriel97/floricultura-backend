@@ -1,5 +1,5 @@
 // src/models/usuarioModel.js
-import { DataTypes } from 'sequelize';
+import { DataTypes, Sequelize } from 'sequelize'; // ✅ AJUSTE: Importar 'Sequelize'
 import sequelize from '../config/db.js';
 
 const Usuario = sequelize.define(
@@ -14,11 +14,31 @@ const Usuario = sequelize.define(
       validate: { isEmail: true },
     },
     senhaHash: { type: DataTypes.STRING, allowNull: false },
-    tipoUsuario: { type: DataTypes.STRING, allowNull: false, defaultValue: 'cliente' },
+    tipoUsuario: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'cliente',
+    },
+
+    // ✅ AJUSTE CRÍTICO:
+    // Adicionamos um valor padrão VÁLIDO para o MySQL em modo estrito.
+    // Isso corrige o erro 'Incorrect datetime value: 0000-00-00...'
+    createdAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
+    },
   },
   {
     tableName: 'usuarios',
-    timestamps: true, // útil para auditoria; se não quiser, pode colocar false
+    // Mantenha 'timestamps: true' para que o Sequelize continue
+    // atualizando 'updatedAt' automaticamente em updates futuros.
+    timestamps: true,
     underscored: false,
   }
 );
